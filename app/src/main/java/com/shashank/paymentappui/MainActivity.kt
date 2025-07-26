@@ -13,9 +13,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.KeyEvent
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.shashank.paymentappui.OpenAIMessage
-import com.shashank.paymentappui.OpenAIRequest
-import com.shashank.paymentappui.OpenAIResponse
+
 import android.view.View
 import android.app.AlertDialog
 import android.view.LayoutInflater
@@ -25,38 +23,31 @@ import android.view.ViewGroup
 import java.text.SimpleDateFormat
 import java.util.*
 import android.widget.ImageView
-import android.speech.RecognizerIntent
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
-import java.io.File
-import java.io.IOException
-import android.media.MediaRecorder
-import android.provider.MediaStore
-import android.graphics.Bitmap
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import android.provider.MediaStore
+import android.graphics.Bitmap
+import android.speech.RecognizerIntent
 
-data class ChatMessage(val sender: String, val text: String)
+data class Receipt(val photoUri: Uri, val extractedText: String, val total: Double, val date: String)
 data class Transaction(val shopName: String, val amount: Double, val date: String)
 
 class MainActivity : AppCompatActivity() {
-    private val chatList = mutableListOf<ChatMessage>()
-    private lateinit var chatRecyclerView: RecyclerView
-    private lateinit var chatAdapter: ChatAdapter
-    // Add some default transactions (e.g., Amazon, Big Market, Swizzy)
+    private val receiptsList = mutableListOf<Receipt>()
+    private lateinit var receiptsRecyclerView: RecyclerView
+    private lateinit var receiptsAdapter: ReceiptsAdapter
+    private var REQUEST_CODE_CAMERA = 2001
+    private var cameraImageUri: Uri? = null
+    private val REQUEST_CODE_SPEECH = 1001
+    private val REQUEST_CODE_MIC_PERMISSION = 1002
+    private val REQUEST_CODE_GALLERY = 3001
+    
+    // Add back Recent Passes functionality
     private val defaultTransactions = listOf(
         Transaction("Big Market", 5250.0, "07 Jul 2024"),
         Transaction("Amazone", 2000.0, "06 Jul 2024"),
@@ -64,13 +55,6 @@ class MainActivity : AppCompatActivity() {
     )
     private val transactionList = mutableListOf<Transaction>().apply { addAll(defaultTransactions) }
     private var defaultsRemoved = false
-    private val REQUEST_CODE_SPEECH = 1001
-    private val REQUEST_CODE_MIC_PERMISSION = 1002
-    private var recorder: MediaRecorder? = null
-    private lateinit var audioFile: File
-    private val openAiApiKey = "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" // <-- Paste your OpenAI API key here
-    private val REQUEST_CODE_CAMERA = 2001
-    private var cameraImageUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,10 +72,14 @@ class MainActivity : AppCompatActivity() {
         // resultAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, chatList.map { "${'$'}{it.sender}: ${'$'}{it.text}" })
         // resultListView.adapter = resultAdapter
 
-        chatRecyclerView = findViewById(R.id.chatRecyclerView)
-        chatAdapter = ChatAdapter(chatList)
-        chatRecyclerView.layoutManager = LinearLayoutManager(this)
-        chatRecyclerView.adapter = chatAdapter
+        // Initialize receipts RecyclerView
+        receiptsRecyclerView = findViewById(R.id.receiptsRecyclerView)
+        receiptsRecyclerView.layoutManager = LinearLayoutManager(this)
+        receiptsAdapter = ReceiptsAdapter(receiptsList, 
+            onItemClick = { receipt -> showReceiptDetailsDialog(receipt) },
+            onDeleteClick = { receipt -> deleteReceipt(receipt) }
+        )
+        receiptsRecyclerView.adapter = receiptsAdapter
 
         searchEdit.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -106,7 +94,7 @@ class MainActivity : AppCompatActivity() {
             if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
                 val query = searchEdit.text.toString()
                 if (query.isNotBlank()) {
-                    searchLovable(query)
+                    // searchLovable(query) // Removed AI search
                 }
                 true
             } else {
@@ -118,7 +106,7 @@ class MainActivity : AppCompatActivity() {
             if (keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP) {
                 val query = searchEdit.text.toString()
                 if (query.isNotBlank()) {
-                    searchLovable(query)
+                    // searchLovable(query) // Removed AI search
                 }
                 true
             } else {
@@ -153,115 +141,50 @@ class MainActivity : AppCompatActivity() {
         }
 
         micButton.setOnClickListener {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-            try {
-                startActivityForResult(intent, REQUEST_CODE_SPEECH)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Speech recognition not supported", Toast.LENGTH_SHORT).show()
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_CODE_MIC_PERMISSION)
+            } else {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+                try {
+                    startActivityForResult(intent, REQUEST_CODE_SPEECH)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Speech recognition not supported", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
         cameraButton.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), REQUEST_CODE_CAMERA)
-            } else {
-                openCameraForBill()
-            }
+            val options = arrayOf("Take Photo", "Choose from Gallery")
+            AlertDialog.Builder(this)
+                .setTitle("Add Receipt")
+                .setItems(options) { _, which ->
+                    when (which) {
+                        0 -> { // Take Photo
+                            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), REQUEST_CODE_CAMERA)
+                            } else {
+                                openCameraForBill()
+                            }
+                        }
+                        1 -> { // Choose from Gallery
+                            val intent = Intent(Intent.ACTION_PICK)
+                            intent.type = "image/*"
+                            startActivityForResult(intent, REQUEST_CODE_GALLERY)
+                        }
+                    }
+                }
+                .show()
         }
 
         // Set up mini camera click listeners in Recent Passes section
         setupMiniCamListeners()
     }
 
-    private fun checkPermissions(): Boolean {
-        val permissions = arrayOf(
-            android.Manifest.permission.RECORD_AUDIO
-        )
-        val missing = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_CODE_MIC_PERMISSION)
-            return false
-        }
-        return true
-    }
-
-    private fun startRecording() {
-        audioFile = File(externalCacheDir, "audio.mp4")
-        recorder = MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(audioFile.absolutePath)
-            prepare()
-            start()
-        }
-    }
-
-    private fun stopRecording() {
-        recorder?.apply {
-            stop()
-            release()
-        }
-        recorder = null
-    }
-
-    private fun transcribeAudio(apiKey: String, audioFile: File, callback: (String?) -> Unit) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val client = OkHttpClient()
-            val requestBody = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("file", audioFile.name, audioFile.asRequestBody("audio/mp4".toMediaTypeOrNull()))
-                .addFormDataPart("model", "whisper-1")
-                .build()
-
-            val request = Request.Builder()
-                .url("https://api.openai.com/v1/audio/transcriptions")
-                .addHeader("Authorization", "Bearer $apiKey")
-                .post(requestBody)
-                .build()
-
-            try {
-                val response = client.newCall(request).execute()
-                val result = response.body?.string()
-                if (!response.isSuccessful) {
-                    // Show error code and message
-                    callback("API error: ${response.code} ${response.message}\n$result")
-                    return@launch
-                }
-                val text = JSONObject(result ?: "").optString("text")
-                callback(text)
-            } catch (e: Exception) {
-                callback("Exception: ${e.message}")
-            }
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        Toast.makeText(this, "onRequestPermissionsResult called", Toast.LENGTH_SHORT).show()
-        if (requestCode == REQUEST_CODE_MIC_PERMISSION) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                startRecording()
-                val micButton = findViewById<ImageButton>(R.id.micButton)
-                micButton.setImageResource(R.drawable.ic_mic)
-                Toast.makeText(this, "Recording... Tap again to stop.", Toast.LENGTH_SHORT).show()
-            } else {
-                // Show which permissions are missing
-                val denied = permissions.zip(grantResults.toTypedArray())
-                    .filter { it.second != PackageManager.PERMISSION_GRANTED }
-                    .joinToString { it.first }
-                Toast.makeText(this, "Denied: $denied", Toast.LENGTH_LONG).show()
-                Toast.makeText(this, "Microphone permission is required", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     private fun openCameraForBill() {
+        Toast.makeText(this, "Please take a clear, well-lit photo of the bill/receipt for best results.", Toast.LENGTH_LONG).show()
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         val photoUri = createImageUri()
         cameraImageUri = photoUri
@@ -288,12 +211,16 @@ class MainActivity : AppCompatActivity() {
             val spokenText = result?.getOrNull(0) ?: ""
             val searchEdit = findViewById<EditText>(R.id.searchEdit)
             searchEdit.setText(spokenText)
-            if (spokenText.isNotBlank()) {
-                searchLovable(spokenText)
-            }
         } else if (requestCode == REQUEST_CODE_CAMERA && resultCode == RESULT_OK) {
             cameraImageUri?.let { uri ->
                 val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
+                runTextRecognition(bitmap)
+            }
+        } else if (requestCode == REQUEST_CODE_GALLERY && resultCode == RESULT_OK && data != null) {
+            val imageUri = data.data
+            if (imageUri != null) {
+                val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+                cameraImageUri = imageUri // Save for receipts
                 runTextRecognition(bitmap)
             }
         }
@@ -305,60 +232,62 @@ class MainActivity : AppCompatActivity() {
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val text = visionText.text
-                // Try to parse shop name and amount
-                val (shop, amount) = parseShopAndAmount(text)
-                showAddTransactionDialogPrefill(shop, amount)
+                // Always add to receipts list
+                val date = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
+                cameraImageUri?.let { uri ->
+                    receiptsList.add(0, Receipt(uri, text, 0.0, date))
+                    receiptsAdapter.notifyItemInserted(0)
+                }
+                // Show dialog to let user review/edit recognized text before parsing
+                showRecognizedTextDialog(text)
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Could not extract text from image", Toast.LENGTH_SHORT).show()
             }
     }
 
-    private fun parseShopAndAmount(text: String): Pair<String, Double> {
-        // Simple heuristics: first wordy line is shop, first number with decimal is amount
+    private fun showRecognizedTextDialog(recognizedText: String) {
+        val textView = TextView(this)
+        textView.text = recognizedText
+        textView.setPadding(32, 32, 32, 32)
+        AlertDialog.Builder(this)
+            .setTitle("Recognized Text")
+            .setView(textView)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun parseShopAndAmountImproved(text: String): Pair<String, Double> {
+        // Try to find amount using keywords like 'Total', 'Amount', etc.
         val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
         var shop = ""
         var amount = 0.0
+        val amountKeywords = listOf("total", "amount", "grand total", "balance due")
         for (line in lines) {
             if (shop.isEmpty() && line.any { it.isLetter() }) {
                 shop = line.take(32)
             }
-            val amtMatch = Regex("[₹$]?([0-9]+[.,][0-9]{2,})").find(line)
-            if (amtMatch != null) {
-                val amtStr = amtMatch.groupValues[1].replace(",", ".")
-                amount = amtStr.toDoubleOrNull() ?: 0.0
-            }
-            if (shop.isNotEmpty() && amount > 0) break
-        }
-        return Pair(shop, amount)
-    }
-
-    private fun showAddTransactionDialogPrefill(shop: String, amount: Double) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_transaction, null)
-        val shopNameInput = dialogView.findViewById<EditText>(R.id.shopNameInput)
-        val amountInput = dialogView.findViewById<EditText>(R.id.amountInput)
-        shopNameInput.setText(shop)
-        amountInput.setText(if (amount > 0) amount.toString() else "")
-        AlertDialog.Builder(this)
-            .setTitle("Add Recent Pass from Bill")
-            .setView(dialogView)
-            .setPositiveButton("Add") { _, _ ->
-                val shopFinal = shopNameInput.text.toString()
-                val amountFinal = amountInput.text.toString().toDoubleOrNull() ?: 0.0
-                val date = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
-                if (shopFinal.isNotBlank() && amountFinal > 0) {
-                    if (!defaultsRemoved) {
-                        transactionList.clear()
-                        defaultsRemoved = true
-                    }
-                    transactionList.add(Transaction(shopFinal, amountFinal, date))
-                    updateRecentPassesUI()
-                } else {
-                    Toast.makeText(this, "Enter valid details", Toast.LENGTH_SHORT).show()
+            val lower = line.lowercase()
+            if (amount == 0.0 && amountKeywords.any { lower.contains(it) }) {
+                val amtMatch = Regex("[₹$]?([0-9]+[.,][0-9]{2,})").find(line)
+                if (amtMatch != null) {
+                    val amtStr = amtMatch.groupValues[1].replace(",", ".")
+                    amount = amtStr.toDoubleOrNull() ?: 0.0
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+        // Fallback: first number with decimal if not found by keyword
+        if (amount == 0.0) {
+            for (line in lines) {
+                val amtMatch = Regex("[₹$]?([0-9]+[.,][0-9]{2,})").find(line)
+                if (amtMatch != null) {
+                    val amtStr = amtMatch.groupValues[1].replace(",", ".")
+                    amount = amtStr.toDoubleOrNull() ?: 0.0
+                    break
+                }
+            }
+        }
+        return Pair(shop, amount)
     }
 
     private fun setupMiniCamListeners() {
@@ -465,39 +394,37 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    private fun updateChat() {
-        chatRecyclerView.visibility = View.VISIBLE
-        chatAdapter.notifyDataSetChanged()
-        chatRecyclerView.scrollToPosition(chatList.size - 1)
+    private fun showReceiptDetailsDialog(receipt: Receipt) {
+        val imageView = ImageView(this)
+        imageView.setImageURI(receipt.photoUri)
+        imageView.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 500)
+        imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+        val textView = TextView(this)
+        textView.text = "${receipt.extractedText}\n\nTotal: ₹%.2f\nDate: %s".format(receipt.total, receipt.date)
+        textView.setPadding(16, 16, 16, 16)
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.addView(imageView)
+        container.addView(textView)
+        AlertDialog.Builder(this)
+            .setTitle("Receipt Details")
+            .setView(container)
+            .setPositiveButton("Close", null)
+            .show()
     }
 
-    private fun searchLovable(query: String) {
-        Toast.makeText(this, "Asking AI: $query", Toast.LENGTH_SHORT).show()
-        chatList.add(ChatMessage("You", query))
-        updateChat()
-        val request = OpenAIRequest(
-            model = "gpt-3.5-turbo",
-            messages = listOf(OpenAIMessage(content = query))
-        )
-        RetrofitClient.openAiApi.getChatCompletion(request).enqueue(object : retrofit2.Callback<OpenAIResponse> {
-            override fun onResponse(call: retrofit2.Call<OpenAIResponse>, response: retrofit2.Response<OpenAIResponse>) {
-                if (response.isSuccessful) {
-                    val aiResponse = response.body()
-                    val answer = aiResponse?.choices?.firstOrNull()?.message?.content
-                    if (!answer.isNullOrBlank()) {
-                        chatList.add(ChatMessage("AI", answer))
-                    } else {
-                        chatList.add(ChatMessage("AI", "Sorry, I don't have an answer for that yet."))
-                    }
-                } else {
-                    chatList.add(ChatMessage("AI", "API error: ${response.code()}"))
+    private fun deleteReceipt(receipt: Receipt) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete Receipt")
+            .setMessage("Are you sure you want to delete this receipt?")
+            .setPositiveButton("Delete") { _, _ ->
+                val position = receiptsList.indexOf(receipt)
+                if (position != -1) {
+                    receiptsList.removeAt(position)
+                    receiptsAdapter.notifyItemRemoved(position)
                 }
-                updateChat()
             }
-            override fun onFailure(call: retrofit2.Call<OpenAIResponse>, t: Throwable) {
-                chatList.add(ChatMessage("AI", "Network error: ${t.message}"))
-                updateChat()
-            }
-        })
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

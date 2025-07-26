@@ -45,7 +45,6 @@
                 android:layout_marginStart="8dp"
                 android:layout_marginEnd="4dp"
                 android:adjustViewBounds="true"
-                android:scaleType="centerInside"
                 android:background="@android:color/transparent"
                 android:contentDescription="Mic"
                 android:src="@drawable/ic_mic" />
@@ -57,20 +56,10 @@
                 android:layout_marginStart="4dp"
                 android:layout_marginEnd="0dp"
                 android:adjustViewBounds="true"
-                android:scaleType="centerInside"
                 android:background="@android:color/transparent"
                 android:contentDescription="Camera"
                 android:src="@drawable/ic_cam_small" />
         </LinearLayout>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/chatRecyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:visibility="gone"/>
 
         <!-- Feature Card Row (moved below chat) -->
         <LinearLayout
@@ -178,40 +167,11 @@
             </LinearLayout>
         </LinearLayout>
 
-        <LinearLayout
-        android:id="@+id/aiAnswerCard"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:orientation="horizontal"
-        android:background="@drawable/feature_card_bg"
-        android:padding="16dp"
-        android:layout_marginBottom="18dp"
-        android:elevation="3dp">
-
-        <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@drawable/ic_receipt"
-            android:layout_marginEnd="12dp"
-            android:contentDescription="AI answer icon" />
-
-        <TextView
-            android:id="@+id/aiAnswerText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:textColor="#222"
-            android:textSize="15sp"
-            android:layout_weight="1"
-            android:lineSpacingExtra="2dp"/>
-    </LinearLayout>
-
-
         <!-- Recent Passes Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Resent Passes"
+            android:text="Recent Passes"
             android:textSize="15sp"
             android:textStyle="bold"
             android:layout_marginBottom="10dp"/>
@@ -226,7 +186,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:orientation="horizontal"
-
                 android:gravity="center_vertical"
                 android:layout_marginBottom="8dp">
 
@@ -264,9 +223,7 @@
                     android:layout_height="32dp"
                     android:src="@drawable/ic_cam_small"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Pass Camera"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"/>
+                    android:contentDescription="Pass Camera"/>
             </LinearLayout>
             <!-- Row 2 -->
             <LinearLayout
@@ -310,9 +267,7 @@
                     android:layout_height="32dp"
                     android:src="@drawable/ic_cam_small"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Pass Camera"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"/>
+                    android:contentDescription="Pass Camera"/>
             </LinearLayout>
             <!-- Row 3 -->
             <LinearLayout
@@ -356,9 +311,7 @@
                     android:layout_height="32dp"
                     android:src="@drawable/ic_cam_small"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Pass Camera"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"/>
+                    android:contentDescription="Pass Camera"/>
             </LinearLayout>
         </LinearLayout>
 
@@ -386,6 +339,28 @@
                 android:text="₹10,000"
                 android:textSize="15sp"
                 android:layout_marginStart="8dp"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="My Previous Receipts"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/receiptsRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never"
+                android:paddingBottom="16dp"/>
         </LinearLayout>
 
     </LinearLayout>
