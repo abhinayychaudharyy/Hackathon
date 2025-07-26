@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Payment App UI</string>
+    <string name="welcome">Welcome!</string>
+    <string name="first_name">Enter your first name</string>
+    <string name="last_name">Enter your last name</string>
+    <string name="submit">Submit</string>
+
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+</resources>

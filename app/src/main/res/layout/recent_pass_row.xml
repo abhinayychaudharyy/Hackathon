@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <ImageView
+        android:id="@+id/shopIcon"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@drawable/ic_market"
+        android:contentDescription="Shop Icon"
+        android:layout_marginEnd="8dp"/>
+
+    <TextView
+        android:id="@+id/shopName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:text="Shop Name"
+        android:textColor="#333"
+        android:textSize="16sp"/>
+
+    <TextView
+        android:id="@+id/amount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="₹0.00"
+        android:textColor="#1976D2"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:layout_marginStart="8dp"/>
+
+    <TextView
+        android:id="@+id/date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="01 Jan 2024"
+        android:textColor="#888"
+        android:textSize="13sp"
+        android:layout_marginStart="8dp"/>
+
+    <ImageButton
+        android:id="@+id/miniCamButton"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@drawable/ic_cam_small"
+        android:background="@android:color/transparent"
+        android:contentDescription="Pass Camera"
+        android:layout_marginStart="8dp"
+        android:scaleType="centerInside"
+        android:padding="4dp"/>
+
+    <ImageButton
+        android:id="@+id/deleteButton"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@android:drawable/ic_menu_delete"
+        android:background="@android:color/transparent"
+        android:contentDescription="Delete Transaction"
+        android:layout_marginStart="4dp"
+        android:scaleType="centerInside"/>
+
+</LinearLayout> 
